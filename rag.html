@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RAG Learning Playground</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+*{
+box-sizing:border-box;
+font-family:system-ui,Segoe UI,Roboto,Arial;
+}
+
+body{
+margin:0;
+background:linear-gradient(135deg,#0f172a,#020617);
+color:#e5e7eb;
+min-height:100vh;
+}
+
+header{
+text-align:center;
+padding:30px 10px;
+font-size:28px;
+font-weight:600;
+letter-spacing:1px;
+background:linear-gradient(90deg,#6366f1,#22d3ee);
+-webkit-background-clip:text;
+color:transparent;
+}
+
+.pipeline{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(350px,1fr));
+gap:20px;
+padding:25px;
+}
+
+.card{
+background:rgba(255,255,255,0.05);
+border-radius:14px;
+padding:18px;
+backdrop-filter:blur(8px);
+border:1px solid rgba(255,255,255,0.08);
+transition:0.3s;
+}
+
+.card:hover{
+transform:translateY(-3px);
+border-color:#6366f1;
+}
+
+h2{
+margin-top:0;
+font-size:18px;
+color:#a5b4fc;
+}
+
+textarea,input{
+width:100%;
+background:#020617;
+border:1px solid #374151;
+border-radius:8px;
+color:white;
+padding:8px;
+margin-top:6px;
+}
+
+button{
+margin-top:10px;
+background:linear-gradient(90deg,#6366f1,#22d3ee);
+border:none;
+color:white;
+padding:8px 12px;
+border-radius:8px;
+cursor:pointer;
+transition:0.2s;
+}
+
+button:hover{
+transform:scale(1.05);
+}
+
+.explain{
+font-size:12px;
+opacity:.7;
+margin-bottom:8px;
+}
+
+.chunk{
+background:#020617;
+padding:6px;
+border-radius:6px;
+margin:4px 0;
+font-size:13px;
+border-left:3px solid #22d3ee;
+}
+
+.highlight{
+border-left:3px solid #22c55e;
+}
+
+table{
+width:100%;
+font-size:12px;
+border-collapse:collapse;
+margin-top:6px;
+}
+
+td,th{
+border:1px solid #334155;
+padding:4px;
+text-align:center;
+}
+
+.scroll{
+max-height:160px;
+overflow:auto;
+}
+
+.answer{
+background:#020617;
+padding:10px;
+border-radius:8px;
+margin-top:8px;
+border:1px solid #374151;
+}
+
+.progress{
+height:6px;
+background:#020617;
+border-radius:10px;
+overflow:hidden;
+margin-bottom:15px;
+}
+
+.bar{
+height:100%;
+width:0%;
+background:linear-gradient(90deg,#6366f1,#22d3ee);
+transition:0.4s;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>RAG Interactive Learning Playground</header>
+
+<div class="progress"><div class="bar" id="progress"></div></div>
+
+<div class="pipeline">
+
+<div class="card">
+<h2>1. Knowledge Base Input</h2>
+<div class="explain">
+Paste documents to simulate a knowledge base used in Retrieval Augmented Generation.
+</div>
+<textarea id="kb" rows="6" placeholder="Paste documentation text here"></textarea>
+<button onclick="loadDocs()">Upload Documents</button>
+</div>
+
+<div class="card">
+<h2>2. Chunking</h2>
+<div class="explain">
+Chunking splits large documents into smaller pieces so embeddings capture semantic meaning.
+</div>
+<button onclick="chunkText()">Chunk Text</button>
+<div id="chunks" class="scroll"></div>
+</div>
+
+<div class="card">
+<h2>3. Embedding Generation</h2>
+<div class="explain">
+Embeddings convert text chunks into numeric vectors representing semantic meaning.
+</div>
+<button onclick="createEmbeddings()">Generate Embeddings</button>
+<div id="embeddingTable" class="scroll"></div>
+</div>
+
+<div class="card">
+<h2>4. Vector Database</h2>
+<div class="explain">
+Vectors are stored in a vector database enabling fast similarity search.
+</div>
+<button onclick="storeVectors()">Store in Vector DB</button>
+<div id="vectorDB" class="scroll"></div>
+</div>
+
+<div class="card">
+<h2>5. User Query</h2>
+<div class="explain">
+Ask a question which will be embedded and compared against stored vectors.
+</div>
+<input id="query" placeholder="Ask a question">
+<button onclick="embedQuery()">Embed Query</button>
+<div id="queryVector"></div>
+</div>
+
+<div class="card">
+<h2>6. Similarity Search</h2>
+<div class="explain">
+Cosine similarity compares the query embedding with stored vectors to retrieve relevant chunks.
+</div>
+<button onclick="similaritySearch()">Retrieve Context</button>
+<div id="results" class="scroll"></div>
+</div>
+
+<div class="card">
+<h2>7. Context Injection</h2>
+<div class="explain">
+Retrieved chunks become contextual knowledge passed into the LLM prompt.
+</div>
+<div id="context"></div>
+</div>
+
+<div class="card">
+<h2>8. Augmented Prompt</h2>
+<div class="explain">
+The user query and retrieved context are combined before sending to the LLM.
+</div>
+<div id="prompt" class="scroll"></div>
+</div>
+
+<div class="card">
+<h2>9. Generated Answer</h2>
+<div class="explain">
+The LLM uses the augmented prompt to produce an answer grounded in retrieved context.
+</div>
+<button onclick="generateAnswer()">Generate Answer</button>
+<div id="answer" class="answer"></div>
+</div>
+
+</div>
+
+<script>
+
+let documents=""
+let chunks=[]
+let embeddings=[]
+let vectorDB=[]
+let queryVector=[]
+let retrieved=[]
+
+function setProgress(v){
+document.getElementById("progress").style.width=v+"%"
+}
+
+function loadDocs(){
+documents=document.getElementById("kb").value
+setProgress(10)
+}
+
+function chunkText(){
+
+chunks=[]
+let text=documents.split(/[.?!]/)
+
+text.forEach(t=>{
+let s=t.trim()
+if(s.length>0)chunks.push(s)
+})
+
+let container=document.getElementById("chunks")
+container.innerHTML=""
+
+chunks.forEach((c,i)=>{
+let div=document.createElement("div")
+div.className="chunk"
+div.innerText="Chunk "+(i+1)+": "+c
+container.appendChild(div)
+})
+
+setProgress(25)
+}
+
+function randomVector(size=5){
+let arr=[]
+for(let i=0;i<size;i++){
+arr.push(Number(Math.random().toFixed(3)))
+}
+return arr
+}
+
+function createEmbeddings(){
+
+embeddings=[]
+
+chunks.forEach(c=>{
+embeddings.push(randomVector())
+})
+
+let table="<table><tr><th>Chunk</th><th>Vector</th></tr>"
+
+embeddings.forEach((e,i)=>{
+table+=`<tr><td>${i+1}</td><td>[${e.join(", ")}]</td></tr>`
+})
+
+table+="</table>"
+
+document.getElementById("embeddingTable").innerHTML=table
+
+setProgress(40)
+}
+
+function storeVectors(){
+
+vectorDB=[]
+
+chunks.forEach((c,i)=>{
+vectorDB.push({text:c,vector:embeddings[i]})
+})
+
+let html=""
+
+vectorDB.forEach((v,i)=>{
+html+=`<div class="chunk">Vector ${i+1} stored</div>`
+})
+
+document.getElementById("vectorDB").innerHTML=html
+
+setProgress(55)
+}
+
+function embedQuery(){
+
+queryVector=randomVector()
+
+document.getElementById("queryVector").innerHTML="Vector: ["+queryVector.join(", ")+"]"
+
+setProgress(65)
+}
+
+function cosine(a,b){
+
+let dot=0
+let magA=0
+let magB=0
+
+for(let i=0;i<a.length;i++){
+dot+=a[i]*b[i]
+magA+=a[i]*a[i]
+magB+=b[i]*b[i]
+}
+
+magA=Math.sqrt(magA)
+magB=Math.sqrt(magB)
+
+return dot/(magA*magB)
+}
+
+function similaritySearch(){
+
+let scores=[]
+
+vectorDB.forEach(v=>{
+scores.push({
+text:v.text,
+score:cosine(queryVector,v.vector)
+})
+})
+
+scores.sort((a,b)=>b.score-a.score)
+
+retrieved=scores.slice(0,2)
+
+let html=""
+
+retrieved.forEach(r=>{
+html+=`<div class="chunk highlight">${r.text}<br>score: ${r.score.toFixed(3)}</div>`
+})
+
+document.getElementById("results").innerHTML=html
+
+let ctx=""
+
+retrieved.forEach(r=>{
+ctx+=r.text+" "
+})
+
+document.getElementById("context").innerText=ctx
+
+let prompt="Context:\n"+ctx+"\n\nQuestion:\n"+document.getElementById("query").value
+
+document.getElementById("prompt").innerText=prompt
+
+setProgress(85)
+}
+
+function generateAnswer(){
+
+let answer="Based on retrieved knowledge: "
+
+retrieved.forEach(r=>{
+answer+=r.text+". "
+})
+
+answer+="This simulated response demonstrates how RAG augments LLM output with external knowledge."
+
+document.getElementById("answer").innerText=answer
+
+setProgress(100)
+}
+
+</script>
+
+</body>
+</html>
