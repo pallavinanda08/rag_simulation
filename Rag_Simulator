@@ -310,7 +310,7 @@ function generateAnswer(query,context){
 
 let combined=context.map(c=>c.chunk).join(". ")
 
-let answer="Based on retrieved knowledge: "+combined+". Therefore the answer to '"+query+"' is derived from the above context."
+let answer= "Based on retrieved knowledge: "+combined+". Therefore, the answer to '"+query+"' is derived from the above context."
 
 document.getElementById("answer").innerText=answer
 
